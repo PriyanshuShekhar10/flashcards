@@ -33,17 +33,20 @@ A responsive, mobile-first flashcard web application built with Next.js. Each fl
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/PriyanshuShekhar10/flashcards.git
 cd flashcards
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Run the development server:
+
 ```bash
 npm run dev
 ```

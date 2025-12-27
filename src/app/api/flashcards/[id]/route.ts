@@ -3,10 +3,12 @@ import { flashcards } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const id = parseInt(params.id, 10);
+    // Handle params as either a Promise (Next.js 15+) or object (Next.js 14)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const id = parseInt(resolvedParams.id, 10);
     const card = flashcards.getById(id);
 
     if (!card) {
@@ -28,10 +30,12 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const id = parseInt(params.id, 10);
+    // Handle params as either a Promise (Next.js 15+) or object (Next.js 14)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const id = parseInt(resolvedParams.id, 10);
     const body = await request.json();
     const { notes, folderId } = body;
 
@@ -54,10 +58,12 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const id = parseInt(params.id, 10);
+    // Handle params as either a Promise (Next.js 15+) or object (Next.js 14)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const id = parseInt(resolvedParams.id, 10);
     flashcards.delete(id);
 
     return NextResponse.json({ success: true });
