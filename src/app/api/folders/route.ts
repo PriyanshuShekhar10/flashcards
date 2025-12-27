@@ -3,12 +3,13 @@ import { folders } from '@/lib/db';
 
 export async function GET() {
   try {
-    const allFolders = folders.getAll();
+    const allFolders = await folders.getAll();
     return NextResponse.json({ success: true, folders: allFolders });
   } catch (error) {
     console.error('Error fetching folders:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to fetch folders' },
+      { error: 'Failed to fetch folders', details: errorMessage },
       { status: 500 }
     );
   }
@@ -26,12 +27,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const folder = folders.create(name.trim());
+    const folder = await folders.create(name.trim());
     return NextResponse.json({ success: true, folder }, { status: 201 });
   } catch (error) {
     console.error('Error creating folder:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to create folder' },
+      { error: 'Failed to create folder', details: errorMessage },
       { status: 500 }
     );
   }

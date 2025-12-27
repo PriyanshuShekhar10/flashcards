@@ -20,7 +20,7 @@ A responsive, mobile-first flashcard web application built with Next.js. Each fl
 - **Next.js 16.1.1** - React framework with App Router
 - **TypeScript** - Type-safe development
 - **Tailwind CSS** - Utility-first CSS framework
-- **SQLite** (better-sqlite3) - Local database for data persistence
+- **Supabase** - PostgreSQL database for data persistence
 - **FreeImage.host API** - Image hosting service
 
 ## Getting Started
@@ -29,6 +29,7 @@ A responsive, mobile-first flashcard web application built with Next.js. Each fl
 
 - Node.js 18+ installed
 - npm or yarn package manager
+- A Supabase account (free tier works fine)
 
 ### Installation
 
@@ -45,13 +46,31 @@ cd flashcards
 npm install
 ```
 
-3. Run the development server:
+3. Set up Supabase:
+
+   a. Create a new project at [supabase.com](https://supabase.com)
+
+   b. Go to your project's SQL Editor and run the SQL from `supabase-schema.sql` to create the necessary tables
+
+   c. Go to Settings → API and copy your:
+
+   - Project URL
+   - `anon` `public` API key
+
+   d. Create a `.env.local` file in the root directory:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Run the development server:
 
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ### Building for Production
 
@@ -95,7 +114,7 @@ flash-cards/
 │   │   └── FlashcardViewer.tsx  # Flashcard display component
 │   └── lib/
 │       └── db.ts         # Database operations
-├── flashcards.db         # SQLite database (created on first run)
+├── supabase-schema.sql   # Database schema SQL for Supabase
 └── public/               # Static assets
 ```
 
@@ -115,8 +134,17 @@ flash-cards/
 
 ## Database Schema
 
+The database schema is defined in `supabase-schema.sql`. Run this SQL in your Supabase SQL Editor to set up the tables.
+
 - **folders**: id, name, createdAt
 - **flashcards**: id, imageUrl, thumbUrl, notes, folderId, starred, lastVisited, createdAt
+
+## Deployment
+
+This app is configured for deployment on Vercel. Make sure to add your Supabase environment variables in your Vercel project settings:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## License
 

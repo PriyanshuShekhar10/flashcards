@@ -16,12 +16,13 @@ export async function GET(request: NextRequest) {
     const starredBool = starred === "true";
     const dateStr = dateFilter || undefined;
 
-    const cards = flashcards.getAll(folderIdNum, starredBool, dateStr);
+    const cards = await flashcards.getAll(folderIdNum, starredBool, dateStr);
     return NextResponse.json({ success: true, flashcards: cards });
   } catch (error) {
     console.error("Error fetching flashcards:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: "Failed to fetch flashcards" },
+      { error: "Failed to fetch flashcards", details: errorMessage },
       { status: 500 }
     );
   }
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const card = flashcards.create(
+    const card = await flashcards.create(
       imageUrl,
       notes || "",
       folderId || null,

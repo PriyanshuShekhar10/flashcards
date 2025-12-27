@@ -9,7 +9,7 @@ export async function GET(
     // Handle params as either a Promise (Next.js 15+) or object (Next.js 14)
     const resolvedParams = params instanceof Promise ? await params : params;
     const id = parseInt(resolvedParams.id, 10);
-    const card = flashcards.getById(id);
+    const card = await flashcards.getById(id);
 
     if (!card) {
       return NextResponse.json(
@@ -43,8 +43,8 @@ export async function PATCH(
     if (notes !== undefined) updates.notes = notes;
     if (folderId !== undefined) updates.folderId = folderId;
 
-    flashcards.update(id, updates);
-    const updatedCard = flashcards.getById(id);
+    await flashcards.update(id, updates);
+    const updatedCard = await flashcards.getById(id);
 
     return NextResponse.json({ success: true, flashcard: updatedCard });
   } catch (error) {
@@ -64,7 +64,7 @@ export async function DELETE(
     // Handle params as either a Promise (Next.js 15+) or object (Next.js 14)
     const resolvedParams = params instanceof Promise ? await params : params;
     const id = parseInt(resolvedParams.id, 10);
-    flashcards.delete(id);
+    await flashcards.delete(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

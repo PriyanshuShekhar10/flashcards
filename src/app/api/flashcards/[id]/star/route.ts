@@ -30,7 +30,7 @@ export async function POST(
       );
     }
     
-    const updatedCard = flashcards.toggleStar(id);
+    const updatedCard = await flashcards.toggleStar(id);
 
     if (!updatedCard) {
       return NextResponse.json(

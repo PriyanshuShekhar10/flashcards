@@ -5,7 +5,9 @@ import { flashcards } from '@/lib/db';
 
 // Import node-fetch for form-data support (v2 works directly with require)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const nodeFetch = require('node-fetch');
+const nodeFetchModule = require('node-fetch');
+// node-fetch v2 exports as a module, need to access default
+const nodeFetch = nodeFetchModule.default || nodeFetchModule;
 
 const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
 const FREEIMAGE_UPLOAD_URL = 'https://freeimage.host/api/1/upload';
@@ -36,11 +38,6 @@ async function uploadImageToFreeImage(buffer: Buffer, filename: string): Promise
   uploadFormData.append('format', 'json');
 
   // Use nodeFetch (node-fetch) instead of native fetch
-  if (typeof nodeFetch !== 'function') {
-    console.error('nodeFetch is not a function:', typeof nodeFetch, nodeFetch);
-    throw new Error('nodeFetch is not available');
-  }
-  
   const response = await nodeFetch(FREEIMAGE_UPLOAD_URL, {
     method: 'POST',
     body: uploadFormData,
@@ -144,7 +141,7 @@ export async function POST(request: NextRequest) {
         console.log(`Uploaded successfully: ${imageUrl}`);
 
         // Create flashcard with empty notes
-        const card = flashcards.create(
+        const card = await flashcards.create(
           imageUrl,
           '',
           folderId,

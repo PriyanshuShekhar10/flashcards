@@ -19,8 +19,8 @@ export async function POST(
     
     const now = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
 
-    flashcards.update(id, { lastVisited: now });
-    const updatedCard = flashcards.getById(id);
+    await flashcards.update(id, { lastVisited: now });
+    const updatedCard = await flashcards.getById(id);
 
     if (!updatedCard) {
       return NextResponse.json(

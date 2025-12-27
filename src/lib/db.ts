@@ -1,229 +1,374 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { supabase } from './supabase';
 
-const dbPath = path.join(process.cwd(), 'flashcards.db');
-const db = new Database(dbPath);
-
-// Initialize database schema
-export function initDatabase() {
-  // Create folders table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS folders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    )
-  `);
-
-  // Create flashcards table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS flashcards (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      imageUrl TEXT NOT NULL,
-      thumbUrl TEXT,
-      notes TEXT DEFAULT '',
-      folderId INTEGER,
-      starred INTEGER DEFAULT 0,
-      lastVisited INTEGER,
-      createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (folderId) REFERENCES folders(id) ON DELETE SET NULL
-    )
-  `);
-  
-  // Add new columns if they don't exist (for existing databases)
-  try {
-    db.exec(`ALTER TABLE flashcards ADD COLUMN starred INTEGER DEFAULT 0`);
-  } catch (e) {
-    // Column already exists, ignore
+// Helper functions to convert between SQLite integer timestamps and PostgreSQL timestamps
+const toTimestamp = (date: Date | number | null): string | null => {
+  if (!date) return null;
+  if (typeof date === 'number') {
+    // SQLite integer timestamp (seconds) -> PostgreSQL timestamp
+    return new Date(date * 1000).toISOString();
   }
-  try {
-    db.exec(`ALTER TABLE flashcards ADD COLUMN lastVisited INTEGER`);
-  } catch (e) {
-    // Column already exists, ignore
-  }
+  return date instanceof Date ? date.toISOString() : null;
+};
 
-  // Create indexes for better performance
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_flashcards_folderId ON flashcards(folderId);
-    CREATE INDEX IF NOT EXISTS idx_flashcards_createdAt ON flashcards(createdAt);
-    CREATE INDEX IF NOT EXISTS idx_flashcards_starred ON flashcards(starred);
-    CREATE INDEX IF NOT EXISTS idx_flashcards_lastVisited ON flashcards(lastVisited);
-  `);
+const fromTimestamp = (timestamp: string | null): number | null => {
+  if (!timestamp) return null;
+  // PostgreSQL timestamp -> SQLite integer timestamp (seconds)
+  return Math.floor(new Date(timestamp).getTime() / 1000);
+};
+
+// Type definitions to match the original SQLite interface
+export interface Folder {
+  id: number;
+  name: string;
+  createdAt: number;
 }
 
-// Initialize on import
-initDatabase();
+export interface Flashcard {
+  id: number;
+  imageUrl: string;
+  thumbUrl: string | null;
+  notes: string;
+  folderId: number | null;
+  starred: number;
+  lastVisited: number | null;
+  createdAt: number;
+}
 
 // Folder operations
 export const folders = {
-  create: (name: string) => {
-    const stmt = db.prepare('INSERT INTO folders (name) VALUES (?)');
-    const result = stmt.run(name);
-    return { id: result.lastInsertRowid as number, name, createdAt: Date.now() };
+  create: async (name: string): Promise<Folder> => {
+    const { data, error } = await supabase
+      .from('folders')
+      .insert([{ name }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating folder:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: fromTimestamp(data.createdAt) || Date.now(),
+    };
   },
-  getAll: () => {
-    const stmt = db.prepare('SELECT * FROM folders ORDER BY createdAt DESC');
-    return stmt.all() as Array<{ id: number; name: string; createdAt: number }>;
+
+  getAll: async (): Promise<Folder[]> => {
+    const { data, error } = await supabase
+      .from('folders')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching folders:', error);
+      // Convert Supabase error to Error object for better error handling
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    return (data || []).map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      createdAt: fromTimestamp(folder.createdAt) || Date.now(),
+    }));
   },
-  getById: (id: number) => {
-    const stmt = db.prepare('SELECT * FROM folders WHERE id = ?');
-    return stmt.get(id) as { id: number; name: string; createdAt: number } | undefined;
+
+  getById: async (id: number): Promise<Folder | undefined> => {
+    const { data, error } = await supabase
+      .from('folders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned
+        return undefined;
+      }
+      console.error('Error fetching folder:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    if (!data) return undefined;
+
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: fromTimestamp(data.createdAt) || Date.now(),
+    };
   },
-  update: (id: number, name: string) => {
-    const stmt = db.prepare('UPDATE folders SET name = ? WHERE id = ?');
-    stmt.run(name, id);
+
+  update: async (id: number, name: string): Promise<void> => {
+    const { error } = await supabase
+      .from('folders')
+      .update({ name })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating folder:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
   },
-  delete: (id: number) => {
-    const stmt = db.prepare('DELETE FROM folders WHERE id = ?');
-    stmt.run(id);
+
+  delete: async (id: number): Promise<void> => {
+    const { error } = await supabase
+      .from('folders')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting folder:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
   },
 };
 
 // Flashcard operations
 export const flashcards = {
-  create: (imageUrl: string, notes: string = '', folderId: number | null = null, thumbUrl?: string) => {
-    const stmt = db.prepare('INSERT INTO flashcards (imageUrl, thumbUrl, notes, folderId, starred) VALUES (?, ?, ?, ?, 0)');
-    const result = stmt.run(imageUrl, thumbUrl || null, notes, folderId);
-    return { 
-      id: result.lastInsertRowid as number, 
-      imageUrl, 
-      thumbUrl: thumbUrl || null, 
-      notes, 
-      folderId, 
-      starred: 0,
-      lastVisited: null,
-      createdAt: Date.now() 
+  create: async (
+    imageUrl: string,
+    notes: string = '',
+    folderId: number | null = null,
+    thumbUrl?: string
+  ): Promise<Flashcard> => {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .insert([
+        {
+          imageUrl,
+          thumbUrl: thumbUrl || null,
+          notes,
+          folderId,
+          starred: 0,
+          lastVisited: null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating flashcard:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    return {
+      id: data.id,
+      imageUrl: data.imageUrl,
+      thumbUrl: data.thumbUrl,
+      notes: data.notes,
+      folderId: data.folderId,
+      starred: data.starred,
+      lastVisited: fromTimestamp(data.lastVisited),
+      createdAt: fromTimestamp(data.createdAt) || Date.now(),
     };
   },
-  getAll: (folderId?: number | null, starred?: boolean, dateFilter?: string) => {
-    let query = 'SELECT * FROM flashcards WHERE 1=1';
-    const params: any[] = [];
-    
+
+  getAll: async (
+    folderId?: number | null,
+    starred?: boolean,
+    dateFilter?: string | null
+  ): Promise<Flashcard[]> => {
+    let query = supabase.from('flashcards').select('*');
+
+    // Handle folderId filter
     if (folderId !== null && folderId !== undefined) {
-      query += ' AND folderId = ?';
-      params.push(folderId);
+      query = query.eq('folderId', folderId);
     }
-    
+
+    // Handle starred filter
     if (starred === true) {
-      query += ' AND starred = 1';
+      query = query.eq('starred', 1);
     }
-    
+
+    // Handle date filter
     if (dateFilter) {
-      // dateFilter format: "YYYY-MM-DD"
-      const startOfDay = new Date(dateFilter).setHours(0, 0, 0, 0) / 1000;
-      const endOfDay = new Date(dateFilter).setHours(23, 59, 59, 999) / 1000;
-      query += ' AND lastVisited >= ? AND lastVisited <= ?';
-      params.push(startOfDay, endOfDay);
+      const startOfDay = new Date(dateFilter);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(dateFilter);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      query = query
+        .gte('lastVisited', startOfDay.toISOString())
+        .lte('lastVisited', endOfDay.toISOString());
     }
-    
-    query += ' ORDER BY createdAt DESC';
-    
-    const stmt = db.prepare(query);
-    return stmt.all(...params) as Array<{
-      id: number;
-      imageUrl: string;
-      thumbUrl: string | null;
-      notes: string;
-      folderId: number | null;
-      starred: number;
-      lastVisited: number | null;
-      createdAt: number;
-    }>;
+
+    query = query.order('createdAt', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching flashcards:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    return (data || []).map((card) => ({
+      id: card.id,
+      imageUrl: card.imageUrl,
+      thumbUrl: card.thumbUrl,
+      notes: card.notes,
+      folderId: card.folderId,
+      starred: card.starred,
+      lastVisited: fromTimestamp(card.lastVisited),
+      createdAt: fromTimestamp(card.createdAt) || Date.now(),
+    }));
   },
-  
-  getStarred: () => {
-    const stmt = db.prepare('SELECT * FROM flashcards WHERE starred = 1 ORDER BY createdAt DESC');
-    return stmt.all() as Array<{
-      id: number;
-      imageUrl: string;
-      thumbUrl: string | null;
-      notes: string;
-      folderId: number | null;
-      starred: number;
-      lastVisited: number | null;
-      createdAt: number;
-    }>;
+
+  getById: async (id: number): Promise<Flashcard | undefined> => {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned
+        return undefined;
+      }
+      console.error('Error fetching flashcard:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    if (!data) return undefined;
+
+    return {
+      id: data.id,
+      imageUrl: data.imageUrl,
+      thumbUrl: data.thumbUrl,
+      notes: data.notes,
+      folderId: data.folderId,
+      starred: data.starred,
+      lastVisited: fromTimestamp(data.lastVisited),
+      createdAt: fromTimestamp(data.createdAt) || Date.now(),
+    };
   },
-  
-  getByDate: (date: string) => {
-    // date format: "YYYY-MM-DD"
-    const startOfDay = new Date(date).setHours(0, 0, 0, 0) / 1000;
-    const endOfDay = new Date(date).setHours(23, 59, 59, 999) / 1000;
-    const stmt = db.prepare('SELECT * FROM flashcards WHERE lastVisited >= ? AND lastVisited <= ? ORDER BY lastVisited DESC');
-    return stmt.all(startOfDay, endOfDay) as Array<{
-      id: number;
-      imageUrl: string;
-      thumbUrl: string | null;
-      notes: string;
-      folderId: number | null;
-      starred: number;
-      lastVisited: number | null;
-      createdAt: number;
-    }>;
-  },
-  
-  getVisitedDates: () => {
-    const stmt = db.prepare(`
-      SELECT DISTINCT date(lastVisited, 'unixepoch') as visitDate 
-      FROM flashcards 
-      WHERE lastVisited IS NOT NULL 
-      ORDER BY visitDate DESC
-    `);
-    return stmt.all() as Array<{ visitDate: string }>;
-  },
-  getById: (id: number) => {
-    const stmt = db.prepare('SELECT * FROM flashcards WHERE id = ?');
-    return stmt.get(id) as {
-      id: number;
-      imageUrl: string;
-      thumbUrl: string | null;
-      notes: string;
-      folderId: number | null;
-      starred: number;
-      lastVisited: number | null;
-      createdAt: number;
-    } | undefined;
-  },
-  update: (id: number, updates: { notes?: string; folderId?: number | null; starred?: boolean; lastVisited?: number }) => {
+
+  update: async (
+    id: number,
+    updates: {
+      notes?: string;
+      folderId?: number | null;
+      starred?: number;
+      lastVisited?: number;
+    }
+  ): Promise<void> => {
+    const updateData: any = {};
+
     if (updates.notes !== undefined) {
-      const stmt = db.prepare('UPDATE flashcards SET notes = ? WHERE id = ?');
-      stmt.run(updates.notes, id);
+      updateData.notes = updates.notes;
     }
     if (updates.folderId !== undefined) {
-      const stmt = db.prepare('UPDATE flashcards SET folderId = ? WHERE id = ?');
-      stmt.run(updates.folderId, id);
+      updateData.folderId = updates.folderId;
     }
     if (updates.starred !== undefined) {
-      const stmt = db.prepare('UPDATE flashcards SET starred = ? WHERE id = ?');
-      stmt.run(updates.starred ? 1 : 0, id);
+      updateData.starred = updates.starred;
     }
     if (updates.lastVisited !== undefined) {
-      const stmt = db.prepare('UPDATE flashcards SET lastVisited = ? WHERE id = ?');
-      stmt.run(updates.lastVisited, id);
+      updateData.lastVisited = toTimestamp(updates.lastVisited);
+    }
+
+    const { error } = await supabase
+      .from('flashcards')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating flashcard:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
     }
   },
-  toggleStar: (id: number) => {
-    const card = flashcards.getById(id);
+
+  toggleStar: async (id: number): Promise<Flashcard | null> => {
+    const card = await flashcards.getById(id);
     if (!card) return null;
-    const newStarred = (card.starred === 1) ? 0 : 1;
-    const stmt = db.prepare('UPDATE flashcards SET starred = ? WHERE id = ?');
-    stmt.run(newStarred, id);
-    const updatedCard = flashcards.getById(id);
+
+    const newStarred = card.starred === 1 ? 0 : 1;
+
+    const { error } = await supabase
+      .from('flashcards')
+      .update({ starred: newStarred })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error toggling star:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    const updatedCard = await flashcards.getById(id);
     return updatedCard || null;
   },
-  delete: (id: number) => {
-    const stmt = db.prepare('DELETE FROM flashcards WHERE id = ?');
-    stmt.run(id);
-  },
-  count: (folderId?: number | null) => {
-    if (folderId === null || folderId === undefined) {
-      const stmt = db.prepare('SELECT COUNT(*) as count FROM flashcards');
-      return (stmt.get() as { count: number }).count;
+
+  delete: async (id: number): Promise<void> => {
+    const { error } = await supabase
+      .from('flashcards')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting flashcard:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
     }
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM flashcards WHERE folderId = ?');
-    return (stmt.get(folderId) as { count: number }).count;
+  },
+
+  getVisitedDates: async (): Promise<Array<{ date: string }>> => {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('lastVisited')
+      .not('lastVisited', 'is', null);
+
+    if (error) {
+      console.error('Error fetching visited dates:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    // Extract unique dates from timestamps
+    const dateSet = new Set<string>();
+    (data || []).forEach((card) => {
+      if (card.lastVisited) {
+        const date = new Date(card.lastVisited).toISOString().split('T')[0];
+        dateSet.add(date);
+      }
+    });
+
+    return Array.from(dateSet)
+      .sort((a, b) => b.localeCompare(a))
+      .map((date) => ({ date }));
+  },
+
+  count: async (folderId?: number | null): Promise<number> => {
+    let query = supabase.from('flashcards').select('id', { count: 'exact', head: true });
+
+    if (folderId !== null && folderId !== undefined) {
+      query = query.eq('folderId', folderId);
+    }
+
+    const { count, error } = await query;
+
+    if (error) {
+      console.error('Error counting flashcards:', error);
+      const errorMessage = error.message || error.details || JSON.stringify(error);
+      throw new Error(errorMessage);
+    }
+
+    return count || 0;
   },
 };
 
-export default db;
-
+// Keep compatibility with old initDatabase function (no-op for Supabase)
+export function initDatabase() {
+  // Schema initialization is handled by Supabase SQL editor
+  // This function is kept for compatibility
+}
