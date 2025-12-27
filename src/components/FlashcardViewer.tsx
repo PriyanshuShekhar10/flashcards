@@ -41,6 +41,31 @@ export default function FlashcardViewer({
   const [isSaving, setIsSaving] = useState(false);
   const [starred, setStarred] = useState(flashcard.starred === 1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Detect iOS devices
+  const [isIOS, setIsIOS] = useState(false);
+  
+  useEffect(() => {
+    // Detect iOS - improved detection
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const platform = window.navigator.platform?.toLowerCase() || '';
+    const isIOSDevice = 
+      /iphone|ipad|ipod/.test(userAgent) || 
+      (platform === 'macintel' && navigator.maxTouchPoints > 1) ||
+      /iphone|ipad|ipod/i.test(navigator.userAgent);
+    setIsIOS(isIOSDevice);
+    
+    // Also check if Fullscreen API is available
+    const hasFullscreenAPI = !!(document.documentElement.requestFullscreen || 
+      (document.documentElement as any).webkitRequestFullscreen ||
+      (document.documentElement as any).mozRequestFullScreen ||
+      (document.documentElement as any).msRequestFullscreen);
+    
+    // If on iOS and no Fullscreen API, use CSS fallback
+    if (isIOSDevice && !hasFullscreenAPI) {
+      setIsIOS(true);
+    }
+  }, []);
 
   useEffect(() => {
     setNotes(flashcard.notes);
@@ -90,8 +115,21 @@ export default function FlashcardViewer({
 
     if (!isFullscreen) {
       // Enter fullscreen
-      if (container.requestFullscreen) {
-        container.requestFullscreen().then(() => setIsFullscreen(true));
+      if (isIOS) {
+        // iOS doesn't support Fullscreen API, use CSS-based pseudo-fullscreen
+        setIsFullscreen(true);
+        // Prevent body scroll when in fullscreen mode
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+        // Prevent iOS Safari from bouncing when scrolling
+        document.documentElement.style.overflow = 'hidden';
+      } else if (container.requestFullscreen) {
+        container.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {
+          // Fallback if fullscreen is denied
+          setIsFullscreen(true);
+          document.body.style.overflow = 'hidden';
+        });
       } else if ((container as any).webkitRequestFullscreen) {
         (container as any).webkitRequestFullscreen();
         setIsFullscreen(true);
@@ -101,28 +139,54 @@ export default function FlashcardViewer({
       } else if ((container as any).msRequestFullscreen) {
         (container as any).msRequestFullscreen();
         setIsFullscreen(true);
+      } else {
+        // Fallback to CSS-based fullscreen if API is not supported
+        setIsFullscreen(true);
+        document.body.style.overflow = 'hidden';
       }
     } else {
       // Exit fullscreen
-      if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => setIsFullscreen(false));
+      if (isIOS || !document.exitFullscreen) {
+        // CSS-based fullscreen exit
+        setIsFullscreen(false);
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.documentElement.style.overflow = '';
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+          document.body.style.overflow = '';
+        }).catch(() => {
+          setIsFullscreen(false);
+          document.body.style.overflow = '';
+        });
       } else if ((document as any).webkitExitFullscreen) {
         (document as any).webkitExitFullscreen();
         setIsFullscreen(false);
+        document.body.style.overflow = '';
       } else if ((document as any).mozCancelFullScreen) {
         (document as any).mozCancelFullScreen();
         setIsFullscreen(false);
+        document.body.style.overflow = '';
       } else if ((document as any).msExitFullscreen) {
         (document as any).msExitFullscreen();
         setIsFullscreen(false);
+        document.body.style.overflow = '';
       }
     }
   };
 
   // Listen for fullscreen changes (browsers handle Escape key automatically)
   useEffect(() => {
+    if (isIOS) return; // iOS doesn't support Fullscreen API events
+
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
+      // Restore body scroll when exiting fullscreen
+      if (!document.fullscreenElement) {
+        document.body.style.overflow = '';
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -136,16 +200,101 @@ export default function FlashcardViewer({
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
+  }, [isIOS]);
+  
+  // Cleanup body overflow on unmount
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.documentElement.style.overflow = '';
+    };
   }, []);
 
   return (
-    <div className="flex flex-col items-center w-full max-w-3xl mx-auto px-4 py-6">
-      {/* Flashcard Container */}
-      <div 
-        id="flashcard-image-container"
-        className="relative w-full aspect-[4/3] mb-8 perspective-1000 shadow-2xl rounded-2xl overflow-hidden" 
-        style={{ perspective: '1000px' }}
-      >
+    <>
+      {/* iOS Fullscreen Overlay */}
+      {isFullscreen && isIOS && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+          onClick={handleFullscreen}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            minHeight: '-webkit-fill-available',
+            touchAction: 'none',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+            zIndex: 9999,
+          }}
+        >
+          <div 
+            className="relative w-full h-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'relative',
+              minHeight: '-webkit-fill-available',
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Image
+                src={flashcard.imageUrl}
+                alt="Flashcard fullscreen"
+                fill
+                className="object-contain"
+                sizes="100vw"
+                priority
+              />
+            </div>
+            {/* Exit Fullscreen Button for iOS */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFullscreen();
+              }}
+              className="absolute bg-white/90 backdrop-blur-sm active:bg-white text-gray-700 p-3 sm:p-4 rounded-xl transition-all z-10 shadow-lg border border-gray-200"
+              style={{
+                top: `max(env(safe-area-inset-top, 1rem), 1rem)`,
+                right: `max(env(safe-area-inset-right, 1rem), 1rem)`,
+                minWidth: '44px',
+                minHeight: '44px',
+                WebkitTapHighlightColor: 'transparent',
+                touchAction: 'manipulation',
+              }}
+              aria-label="Exit Fullscreen"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div className={`flex flex-col items-center w-full max-w-3xl mx-auto px-4 py-6 ${isFullscreen && isIOS ? 'hidden' : ''}`}>
+        {/* Flashcard Container */}
+        <div 
+          id="flashcard-image-container"
+          className={`relative w-full aspect-[4/3] mb-8 perspective-1000 shadow-2xl rounded-2xl overflow-hidden ${isFullscreen && !isIOS ? 'fixed inset-0 z-[9999] w-screen h-screen m-0 rounded-none' : ''}`}
+          style={{ perspective: '1000px' }}
+        >
         <div
           className="relative w-full h-full transition-transform duration-500"
           style={{
@@ -155,7 +304,7 @@ export default function FlashcardViewer({
         >
           {/* Front Side - Image */}
           <div
-            className="absolute inset-0 w-full h-full bg-gradient-to-br from-white to-gray-50 dark:from-slate-800 dark:to-slate-900 overflow-hidden relative"
+            className="absolute inset-0 w-full h-full bg-gradient-to-br from-white to-gray-50 dark:from-slate-800 dark:to-slate-900 overflow-hidden"
             style={{
               backfaceVisibility: 'hidden',
               WebkitBackfaceVisibility: 'hidden',
@@ -335,7 +484,8 @@ export default function FlashcardViewer({
           Delete Card
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

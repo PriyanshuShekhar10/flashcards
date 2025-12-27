@@ -31,3 +31,16 @@ body {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
+
+/* iOS Safari viewport fixes */
+@supports (-webkit-touch-callout: none) {
+  /* iOS-specific styles */
+  html {
+    height: -webkit-fill-available;
+  }
+  
+  body {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+}
