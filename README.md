@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Flashcards App
+
+A responsive, mobile-first flashcard web application built with Next.js. Each flashcard is an image (front) with optional notes (back), allowing you to create and organize image-based study materials.
+
+## Features
+
+- 📸 **Image-based Flashcards**: Create flashcards from images with optional notes
+- 📦 **Bulk Upload**: Upload multiple images at once via ZIP file
+- 🖼️ **Single Image Upload**: Upload individual images with notes
+- ⭐ **Starred Flashcards**: Mark important flashcards for quick access
+- 📅 **Date-based History**: Automatically tracks when flashcards were viewed
+- 📁 **Folder Organization**: Organize flashcards into folders/collections
+- 🔀 **Shuffle**: Randomize your deck for better study sessions
+- 🔄 **Flip Animation**: Smooth 3D flip animation between image and notes
+- 📱 **Fullscreen View**: View images in fullscreen mode
+- 📱 **Mobile-First Design**: Fully responsive, optimized for mobile devices
+
+## Tech Stack
+
+- **Next.js 16.1.1** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first CSS framework
+- **SQLite** (better-sqlite3) - Local database for data persistence
+- **FreeImage.host API** - Image hosting service
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ installed
+- npm or yarn package manager
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/PriyanshuShekhar10/flashcards.git
+cd flashcards
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Learn More
+### Building for Production
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Usage
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Creating Flashcards
 
-## Deploy on Vercel
+1. **Bulk Upload**: Go to Upload page → Select "Bulk Upload (ZIP)" → Upload a ZIP file containing images
+2. **Single Upload**: Go to Upload page → Select "Single Image" → Choose an image and optionally add notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Organizing Flashcards
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Folders**: Create folders to organize your flashcards by topic or subject
+- **Starred**: Click the star button on any flashcard to mark it as important
+- **Date Filter**: View flashcards by the date they were last viewed
+
+### Studying
+
+- Use the **Flip** button to switch between image and notes
+- Click **Shuffle** to randomize your deck
+- Navigate with **Previous/Next** buttons
+- Use **Fullscreen** to view images in detail
+
+## Project Structure
+
+```
+flash-cards/
+├── src/
+│   ├── app/
+│   │   ├── api/          # API routes for flashcards, folders, uploads
+│   │   ├── folders/      # Folder management page
+│   │   ├── upload/       # Upload page
+│   │   ├── layout.tsx    # Root layout
+│   │   └── page.tsx      # Home page with flashcard viewer
+│   ├── components/
+│   │   └── FlashcardViewer.tsx  # Flashcard display component
+│   └── lib/
+│       └── db.ts         # Database operations
+├── flashcards.db         # SQLite database (created on first run)
+└── public/               # Static assets
+```
+
+## API Endpoints
+
+- `GET /api/flashcards` - Get all flashcards (optional folder/date filter)
+- `POST /api/flashcards` - Create a new flashcard
+- `GET /api/flashcards/[id]` - Get a specific flashcard
+- `PATCH /api/flashcards/[id]` - Update a flashcard
+- `DELETE /api/flashcards/[id]` - Delete a flashcard
+- `POST /api/flashcards/[id]/star` - Toggle star status
+- `POST /api/flashcards/[id]/visit` - Track flashcard visit
+- `GET /api/folders` - Get all folders
+- `POST /api/folders` - Create a folder
+- `POST /api/upload-image` - Upload single image to FreeImage.host
+- `POST /api/upload-zip` - Extract and upload images from ZIP file
+
+## Database Schema
+
+- **folders**: id, name, createdAt
+- **flashcards**: id, imageUrl, thumbUrl, notes, folderId, starred, lastVisited, createdAt
+
+## License
+
+MIT
+
+## Author
+
+Priyanshu Shekhar
